@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
+import sys
+import time
+import json
+import logging
+import threading
+
+from dotenv import load_dotenv
+from flask import Flask, request, abort
+
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+
+import paho.mqtt.client as mqtt
+
+# ------------------ 基本設定 ------------------ #
+
+load_dotenv()
+
+CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+
+if not CHANNEL_ACCESS_TOKEN or not CHANNEL_SECRET:
+    print("❌ 請先在 .env 中設定 LINE_CHANNEL_ACCESS_TOKEN / LINE_CHANNEL_SECRET")
+    sys.exit(1)
+
+line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(CHANNEL_SECRET)
+
+logging.basicConfig(level=logging.INFO)
+
+app = Flask(__name__)
+
+# ------------------ MQTT 設定 ------------------ #
+
+MQTT_BROKER = "localhost"      # YOLO 跟 LINE 在同一台樹莓派
+MQTT_PORT = 1883
+MQTT_TOPIC = "queue/people"
+
+current_people = None
+last_update_ts = None
+
+
+def on_mqtt_message(client, userdata, msg):
+    global current_people, last_update_ts
+    try:
+        payload = msg.payload.decode("utf-8")
+        data = json.loads(payload)
+        current_people = data.get("people")
+        last_update_ts = data.get("ts")
+        logging.info(f"📥 MQTT 人數更新：{current_people}")
+    except Exception as e:
+        logging.warning(f"MQTT 解析錯誤：{e}")
+
+
+def start_mqtt():
+    client = mqtt.Client()
+    client.on_message = on_mqtt_message
+    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.subscribe(MQTT_TOPIC)
+    client.loop_start()
+
+
+# ------------------ Flask 路由 ------------------ #
+
+@app.route("/", methods=["GET"])
+def index():
+    return "LINE Bot (People Counter) is running.", 200
+
+
+@app.route("/callback", methods=["POST"])
+def callback():
+    signature = request.headers.get("X-Line-Signature", "")
+    body = request.get_data(as_text=True)
+
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+
+    return "OK"
+
+
+# ------------------ LINE 訊息處理 ------------------ #
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event: MessageEvent):
+    text = event.message.text.strip().lower()
+
+    if text == "people":
+        if current_people is None:
+            reply = "目前尚未收到人數資料 ⏳"
+        else:
+            reply = f"目前偵測到人數：{current_people} 人 👥"
+
+    elif text == "help":
+        reply = (
+            "可用指令：\n"
+            "- people：查詢目前人數\n"
+            "- help：顯示指令說明"
+        )
+
+    else:
+        reply = "請輸入 people 查詢目前人數 👥"
+
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=reply)
+    )
+
+
+# ------------------ 主程式 ------------------ #
+
+if __name__ == "__main__":
+    # 啟動 MQTT（背景執行）
+    start_mqtt()
+
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
