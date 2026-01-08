@@ -1,9 +1,3 @@
-# -YOLO-LINE-Bot-
-本專題系統主要應用於校園內人潮容易聚集的場域，例如學生餐廳、影印區、公共服務櫃檯等。透過架設攝影設備與嵌入式系統，即可即時偵測現場人數，並將結果提供給場域管理者進行人流掌握，同時讓一般使用者能透過 LINE 平台查詢即時人數，作為是否前往該場域的參考依據。
-📊 AIoT 校園人流即時監測系統
-
-AIoT-based Real-time People Counting System for Campus
-
 📌 專題簡介
 
 本專題利用 Raspberry Pi 搭配 AI 影像辨識技術（YOLO），建置一套低成本且具即時性的人流偵測系統。
@@ -60,7 +54,7 @@ line-bot-sdk
 
 rpicam-hello
 
-▶️ 系統執行流程
+系統執行流程
 Step 1️⃣ 啟動 MQTT Broker
 sudo systemctl start mosquitto
 
@@ -86,11 +80,11 @@ python line_bot_people.py
 💬 LINE Bot 使用方式
 
 在 LINE 聊天室輸入以下指令：
-
-指令	功能
+指令	      功能
 people	查詢目前即時人數
-help	顯示指令說明
-📊 系統成果
+help	   顯示指令說明
+
+📊  系統成果
 
 即時偵測畫面中的人數
 
